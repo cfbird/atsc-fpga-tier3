@@ -10,6 +10,7 @@
 // ============================================================================
 
 #include <iostream>
+#include <iomanip>
 #include <vector>
 #include <string>
 #include <chrono>
@@ -33,17 +34,20 @@ void sig_handler(int) {
 
 int main(int argc, char* argv[]) {
     int channel = 15; // Channel 15 (479.0 MHz KNPB Reno)
-    double gain = 35.0;
+    double gain = 50.0;
     int port = 1234;
+    double freq_offset_khz = 50.0; // Calibrated optimal +50 kHz offset
     std::string fpga_path = "/home/user1/uhd_images/usrp_b210_fpga.bin";
 
     if (argc > 1) channel = std::atoi(argv[1]);
     if (argc > 2) gain = std::atof(argv[2]);
     if (argc > 3) port = std::atoi(argv[3]);
-    if (argc > 4) fpga_path = argv[4];
+    if (argc > 4) freq_offset_khz = std::atof(argv[4]);
+    if (argc > 5) fpga_path = argv[5];
 
     double center_freq = (channel * 6.0 + 389.0) * 1e6;
     if (channel < 14 || channel > 36) center_freq = 479.0e6;
+    center_freq += (freq_offset_khz * 1e3);
 
     double atsc_sym_rate = 4.5e6 / 286.0 * 684.0;
     double sample_rate = atsc_sym_rate * 1.1; // 11.838462 MSps
@@ -51,8 +55,8 @@ int main(int argc, char* argv[]) {
     std::cout << "======================================================================" << std::endl;
     std::cout << "  USRP B210 ZERO-CPU FPGA ATSC 8VSB MPEG-TS HARDWARE STREAMER         " << std::endl;
     std::cout << "======================================================================" << std::endl;
-    std::cout << "[*] RF Channel:        Channel " << channel << " (" << (center_freq / 1e6) << " MHz)" << std::endl;
-    std::cout << "[*] USRP B210 Gain:    " << gain << " dB" << std::endl;
+    std::cout << "[*] RF Channel:        Channel " << channel << " (" << std::fixed << std::setprecision(3) << (center_freq / 1e6) << " MHz)" << std::endl;
+    std::cout << "[*] USRP B210 Gain:    " << std::fixed << std::setprecision(1) << gain << " dB" << std::endl;
     std::cout << "[*] FPGA Hardware Core: Tier 3 Physical Layer Radio-on-Chip (Spartan-6)" << std::endl;
     std::cout << "[*] Host CPU Load:     0.0% (Zero IQ processing - Pure TS packet forwarding)" << std::endl;
     std::cout << "[*] Destination:       udp://127.0.0.1:" << port << std::endl;
@@ -111,12 +115,13 @@ int main(int argc, char* argv[]) {
 
     uint64_t total_bytes = 0;
     uint64_t total_packets = 0;
+    uint64_t pat_packets = 0;
+    uint64_t psip_packets = 0;
+    uint64_t tei_errors = 0;
     auto t_start = std::chrono::steady_clock::now();
     auto last_stat = t_start;
 
     bool in_sync = false;
-
-    size_t debug_count = 0;
 
     while (g_running) {
         uhd::rx_metadata_t md;
@@ -127,16 +132,6 @@ int main(int argc, char* argv[]) {
                 std::cerr << "[!] UHD RX Error: " << md.strerror() << std::endl;
             }
             continue;
-        }
-
-        if (debug_count < 5) {
-            std::cout << "[DBG] Received " << num_rx << " words (" << (num_rx*4) << " bytes). First 16 bytes: ";
-            const uint8_t* p = reinterpret_cast<const uint8_t*>(rx_buffer.data());
-            for (size_t k = 0; k < std::min<size_t>(16, num_rx * 4); ++k) {
-                std::cout << std::hex << (int)p[k] << " ";
-            }
-            std::cout << std::dec << std::endl;
-            debug_count++;
         }
 
         const uint8_t* raw_bytes = reinterpret_cast<const uint8_t*>(rx_buffer.data());
@@ -176,6 +171,18 @@ int main(int argc, char* argv[]) {
                 in_sync = false;
                 break;
             }
+
+            // Inspect 7 packets for telemetry
+            for (size_t p = 0; p < 7; p++) {
+                const uint8_t* pkt = ts_accum_buffer.data() + (p * 188);
+                if (pkt[0] != 0x47) continue;
+                bool tei = (pkt[1] >> 7) & 0x01;
+                if (tei) tei_errors++;
+                uint16_t pid = ((pkt[1] & 0x1F) << 8) | pkt[2];
+                if (pid == 0x0000) pat_packets++;
+                if (pid == 0x1FFB) psip_packets++;
+            }
+
             sendto(sock, ts_accum_buffer.data(), 1316, 0, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
             ts_accum_buffer.erase(ts_accum_buffer.begin(), ts_accum_buffer.begin() + 1316);
             total_bytes += 1316;
@@ -187,9 +194,11 @@ int main(int argc, char* argv[]) {
         if (elapsed_stat >= 2.0) {
             double total_elapsed = std::chrono::duration<double>(now - t_start).count();
             double rate_mbps = (total_bytes * 8.0 / 1e6) / std::max(total_elapsed, 0.1);
+            double tei_pct = (total_packets > 0) ? (tei_errors * 100.0 / total_packets) : 0.0;
             std::cout << "    [FPGA Demod @ " << static_cast<int>(total_elapsed) << "s] Streamed: "
                       << (total_bytes / (1024.0 * 1024.0)) << " MB (" << rate_mbps << " Mbps) | Packets: "
-                      << total_packets << std::endl;
+                      << total_packets << " | PAT: " << pat_packets << " | PSIP: " << psip_packets
+                      << " | TEI: " << std::fixed << std::setprecision(1) << tei_pct << "%" << std::endl;
             last_stat = now;
         }
     }

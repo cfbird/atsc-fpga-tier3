@@ -90,7 +90,7 @@ module atsc_rx_tier3_top #(
     assign field_sync_detected = is_field_sync;
 
     // ------------------------------------------------------------------------
-    // Stage 6: LMS Adaptive Channel Equalizer (64 Taps)
+    // Stage 6: LMS Adaptive Channel Equalizer (24 Taps)
     // ------------------------------------------------------------------------
     wire eq_valid;
     wire signed [DATA_WIDTH-1:0] eq_symbol;
@@ -108,7 +108,7 @@ module atsc_rx_tier3_top #(
     );
 
     // ------------------------------------------------------------------------
-    // Stage 7: 12-Phase Parallel Rate-2/3 Trellis Viterbi Decoder
+    // Stage 7: 12-Phase Parallel Rate-2/3 Trellis Slicer & Decoder
     // ------------------------------------------------------------------------
     wire vit_byte_valid;
     wire [7:0] vit_byte, vit_byte_idx;
@@ -127,6 +127,7 @@ module atsc_rx_tier3_top #(
     wire [7:0] deint_byte;
     atsc_deinterleaver u_deinterleaver (
         .clk(clk), .rst_n(rst_n),
+        .in_field_sync(eq_is_field_sync),
         .in_byte_valid(vit_byte_valid), .in_byte(vit_byte),
         .out_byte_valid(deint_valid), .out_byte(deint_byte)
     );
@@ -150,7 +151,7 @@ module atsc_rx_tier3_top #(
     wire [7:0] derand_byte;
     atsc_derandomizer u_derandomizer (
         .clk(clk), .rst_n(rst_n),
-        .in_field_sync_strobe(is_field_sync),
+        .in_field_sync_strobe(1'b0),
         .in_byte_valid(rs_valid), .in_byte(rs_byte),
         .out_byte_valid(derand_valid), .out_byte(derand_byte)
     );

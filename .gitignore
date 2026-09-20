@@ -1,0 +1,21 @@
+# Build outputs
+bin/
+build/
+*.o
+*.bin
+*.bit
+*.d
+*.log
+
+# Simulation artifacts
+sim/tb_sim
+sim/isim/
+sim/*.wdb
+sim/*.cmd
+sim/*.log
+sim/fuse*
+
+# OS / Editor
+.DS_Store
+*.swp
+*~

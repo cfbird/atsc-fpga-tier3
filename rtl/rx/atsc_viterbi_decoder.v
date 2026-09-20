@@ -39,16 +39,16 @@ module atsc_viterbi_decoder #(
     reg [7:0] current_byte;
     reg [7:0] byte_counter;
     
-    // Slicing logic for 8VSB constellation
+    // Slicing logic for 8VSB constellation (Nominal levels: +-1024, +-3072, +-5120, +-7168)
     reg z2, z1, z0;
     always @(*) begin
-        if (in_soft_sym >= 16'sd3510)       begin z2 = 1'b1; z1 = 1'b1; z0 = 1'b1; end // +7
-        else if (in_soft_sym >= 16'sd2340)  begin z2 = 1'b1; z1 = 1'b1; z0 = 1'b0; end // +5
-        else if (in_soft_sym >= 16'sd1170)  begin z2 = 1'b1; z1 = 1'b0; z0 = 1'b1; end // +3
+        if (in_soft_sym >= 16'sd6144)       begin z2 = 1'b1; z1 = 1'b1; z0 = 1'b1; end // +7
+        else if (in_soft_sym >= 16'sd4096)  begin z2 = 1'b1; z1 = 1'b1; z0 = 1'b0; end // +5
+        else if (in_soft_sym >= 16'sd2048)  begin z2 = 1'b1; z1 = 1'b0; z0 = 1'b1; end // +3
         else if (in_soft_sym >= 16'sd0)     begin z2 = 1'b1; z1 = 1'b0; z0 = 1'b0; end // +1
-        else if (in_soft_sym >= -16'sd1170) begin z2 = 1'b0; z1 = 1'b1; z0 = 1'b1; end // -1
-        else if (in_soft_sym >= -16'sd2340) begin z2 = 1'b0; z1 = 1'b1; z0 = 1'b0; end // -3
-        else if (in_soft_sym >= -16'sd3510) begin z2 = 1'b0; z1 = 1'b0; z0 = 1'b1; end // -5
+        else if (in_soft_sym >= -16'sd2048) begin z2 = 1'b0; z1 = 1'b1; z0 = 1'b1; end // -1
+        else if (in_soft_sym >= -16'sd4096) begin z2 = 1'b0; z1 = 1'b1; z0 = 1'b0; end // -3
+        else if (in_soft_sym >= -16'sd6144) begin z2 = 1'b0; z1 = 1'b0; z0 = 1'b1; end // -5
         else                                begin z2 = 1'b0; z1 = 1'b0; z0 = 1'b0; end // -7
     end
 
